@@ -14,15 +14,12 @@ except ImportError:
     HAS_OCR = False
 
 TOKEN = os.environ.get("DISCORD_TOKEN")
-GUILD_ID = int(os.environ.get("GUILD_ID", "0"))
+GUILD_ID = int(os.environ.get("GUILD_ID", "0"))  # 0 = sync global cho moi server
 GIF_URL = "https://i.pinimg.com/originals/d2/a6/cc/d2a6cc7134978023c1149b3b27b305d4.gif"
 POLICY_URL = "https://discord.com"
 
 BLACK = 0x000000
 DARKER = 0x0A0A0A
-
-WELCOME_CHANNEL_ID = 1548691233143128064
-RULE_CHANNEL_ID = 1548730728479719494
 
 WARN_FILE = "warnings.json"
 MUTE_FILE = "mutes.json"
@@ -78,6 +75,9 @@ SCAM_IMAGE_REGEX = [
 ]
 
 SCAM_LOG_CHANNEL_KEY = "scamLog"
+WELCOME_CHANNEL_KEY = "welcomeChannel"
+GOODBYE_CHANNEL_KEY = "goodbyeChannel"
+RULE_CHANNEL_KEY = "ruleChannel"
 
 ROAST_TEXT = "is stupid"
 TEMPLATE_FILE = "arrow.png"
@@ -163,8 +163,10 @@ def base_embed(title=None, description=None, member=None):
 
 
 def log_embed(title, img=None):
+    """Log: khong GIF mac dinh, chi set image neu img truyen vao"""
     e = discord.Embed(title=title, color=BLACK)
-    e.set_image(url=img or GIF_URL)
+    if img:
+        e.set_image(url=img)
     e.set_footer(text="Log System")
     return e
 
@@ -456,7 +458,6 @@ async def on_message(message):
                         f"Kenh: {message.channel.mention}\n"
                         "Tin nhan da bi xoa")
                     e.set_thumbnail(url=message.author.display_avatar.url)
-                    e.set_image(url=GIF_URL)
                     warn_msg = await message.channel.send(
                         content=f"{message.author.mention} dung gui anh lua dao o day",
                         embed=e)
@@ -479,7 +480,6 @@ async def on_message(message):
                             f"**Kenh:** {message.channel.mention}\n"
                             f"**Loai:** anh lua dao")
                         e.set_thumbnail(url=message.author.display_avatar.url)
-                        e.set_image(url=GIF_URL)
                         if files:
                             await log_ch.send(embed=e, files=files)
                         else:
@@ -511,7 +511,6 @@ async def on_message(message):
                 e = base_embed("AUTO-MUTE", member=member)
                 e.description = f"{member.mention} bi cam mom {AUTO_MUTE_SECONDS}s"
                 e.set_thumbnail(url=member.display_avatar.url)
-                e.set_image(url=GIF_URL)
                 await message.channel.send(content=f"{member.mention} {random.choice(AUTO_REPLIES)}", embed=e)
             except Exception:
                 pass
@@ -587,7 +586,7 @@ async def on_message_delete(message):
     if not ch:
         return
     try:
-        img = message.attachments[0].url if message.attachments else GIF_URL
+        img = message.attachments[0].url if message.attachments else None
         e = log_embed("TIN NHAN BI XOA", img)
         if message.author:
             e.set_author(name=f"Xoa • {message.author}", icon_url=message.author.display_avatar.url)
@@ -635,8 +634,9 @@ async def on_member_ban(guild, user):
     ch = get_ch(guild, "serverLog")
     if not ch:
         return
-    e = log_embed("BI BAN", user.display_avatar.url)
+    e = log_embed("BI BAN")
     e.set_author(name=f"Ban • {user}", icon_url=user.display_avatar.url)
+    e.set_thumbnail(url=user.display_avatar.url)
     e.description = f"**{user.mention}** `{user}`\nID: `{user.id}`"
     await ch.send(embed=e)
 
@@ -646,8 +646,9 @@ async def on_member_unban(guild, user):
     ch = get_ch(guild, "serverLog")
     if not ch:
         return
-    e = log_embed("DUOC UNBAN", user.display_avatar.url)
+    e = log_embed("DUOC UNBAN")
     e.set_author(name=f"Unban • {user}", icon_url=user.display_avatar.url)
+    e.set_thumbnail(url=user.display_avatar.url)
     e.description = f"**{user.mention}** `{user}`\nID: `{user.id}`"
     await ch.send(embed=e)
 
@@ -712,20 +713,51 @@ async def on_guild_role_delete(r):
 
 @bot.event
 async def on_member_join(member):
-    ch = bot.get_channel(WELCOME_CHANNEL_ID)
+    ch = get_ch(member.guild, WELCOME_CHANNEL_KEY)
     if not ch:
         return
-    e = discord.Embed(
-        title="Chao mung thanh vien moi",
-        description=(f"Chao **{member.mention}** da den voi **{member.guild.name}**\n\n"
-                     f"Doc luat o <#{RULE_CHANNEL_ID}>\nChat cung moi nguoi nhe"),
-        color=BLACK)
-    e.set_image(url=GIF_URL)
-    e.set_thumbnail(url=member.display_avatar.url)
-    e.add_field(name="Ten", value=member.name, inline=True)
-    e.add_field(name="Thanh vien thu", value=str(member.guild.member_count), inline=True)
-    e.set_footer(text=f"ID: {member.id}")
-    await ch.send(content=f"{member.mention}", embed=e)
+    rule_ch = get_ch(member.guild, RULE_CHANNEL_KEY)
+    rule_txt = f"Doc luat o {rule_ch.mention}\n" if rule_ch else ""
+    try:
+        e = discord.Embed(
+            title="Chao mung thanh vien moi",
+            description=(f"Chao **{member.mention}** da den voi **{member.guild.name}**\n\n"
+                         f"{rule_txt}Chat cung moi nguoi nhe"),
+            color=BLACK)
+        e.set_image(url=GIF_URL)
+        e.set_thumbnail(url=member.display_avatar.url)
+        e.add_field(name="Ten", value=member.name, inline=True)
+        e.add_field(name="Thanh vien thu", value=str(member.guild.member_count), inline=True)
+        e.set_footer(text=f"ID: {member.id}")
+        await ch.send(content=f"{member.mention}", embed=e)
+    except Exception:
+        pass
+
+
+@bot.event
+async def on_member_remove(member):
+    ch = get_ch(member.guild, GOODBYE_CHANNEL_KEY)
+    if not ch:
+        return
+    try:
+        joined = member.joined_at
+        now = discord.utils.utcnow()
+        stayed = "?"
+        if joined:
+            secs = int((now - joined).total_seconds())
+            stayed = fmt_time(secs)
+        e = discord.Embed(
+            title="Tam biet",
+            description=(f"**{member}** da roi server\n"
+                         f"Cam on ban da o lai **{stayed}**\n\n"
+                         "Hen gap lai ban lan sau"),
+            color=BLACK)
+        e.set_image(url=GIF_URL)
+        e.set_thumbnail(url=member.display_avatar.url)
+        e.set_footer(text=f"ID: {member.id}")
+        await ch.send(embed=e)
+    except Exception:
+        pass
 
 
 class CloseReasonModal(discord.ui.Modal, title="Dong Ticket"):
@@ -807,7 +839,6 @@ def panel_embed(guild):
             "Vui long khong spam ticket\n"
             "Khach hang la thuong de\n"
             "Mua hang = chap nhan Rules & Chinh sach"))
-    e.set_image(url=GIF_URL)
     e.set_footer(text=f"{guild.name} • TICKET SUPPORT")
     return e
 
@@ -822,7 +853,6 @@ def ticket_embed(guild, user, loai):
             "Khong chia se thong tin ca nhan\n"
             "Staff se phan hoi trong it phut"))
     e.set_thumbnail(url=user.display_avatar.url)
-    e.set_image(url=GIF_URL)
     e.set_footer(text=f"{guild.name} • TICKET SUPPORT")
     return e
 
@@ -887,7 +917,7 @@ async def _open_ticket(interaction, slug, loai):
 
 class ChannelPick(discord.ui.ChannelSelect):
     def __init__(self, key, label):
-        super().__init__(placeholder="Chon kenh log", channel_types=[discord.ChannelType.text])
+        super().__init__(placeholder="Chon kenh", channel_types=[discord.ChannelType.text])
         self.key, self.label = key, label
 
     async def callback(self, interaction: discord.Interaction):
@@ -905,7 +935,7 @@ class LogMenu(discord.ui.View):
     def __init__(self):
         super().__init__(timeout=120)
 
-    @discord.ui.select(placeholder="Chon loai log", options=[
+    @discord.ui.select(placeholder="Chon loai cai dat", options=[
         discord.SelectOption(label="Log Tin nhan", value="messageLog",
                              description="Chat, anh, gif, link, file"),
         discord.SelectOption(label="Log Server", value="serverLog",
@@ -914,8 +944,14 @@ class LogMenu(discord.ui.View):
                              description="Vao, roi, chuyen kenh"),
         discord.SelectOption(label="Log Scam", value="scamLog",
                              description="Anh lua dao bi xoa"),
+        discord.SelectOption(label="Kenh Welcome", value="welcomeChannel",
+                             description="Chao thanh vien moi (co GIF)"),
+        discord.SelectOption(label="Kenh Goodbye", value="goodbyeChannel",
+                             description="Tam biet thanh vien roi (co GIF)"),
+        discord.SelectOption(label="Kenh Rule", value="ruleChannel",
+                             description="Kenh luat duoc nhac trong welcome"),
         discord.SelectOption(label="Xem cai dat", value="view",
-                             description="Xem kenh log da cai"),
+                             description="Xem tat ca kenh da cai"),
     ])
     async def select_menu(self, interaction: discord.Interaction, select: discord.ui.Select):
         await interaction.response.defer(ephemeral=True)
@@ -931,21 +967,28 @@ class LogMenu(discord.ui.View):
             e.description = (f"Tin nhan: {g('messageLog')}\n"
                              f"Server: {g('serverLog')}\n"
                              f"Voice: {g('voiceLog')}\n"
-                             f"Scam: {g('scamLog')}")
+                             f"Scam: {g('scamLog')}\n"
+                             f"Welcome: {g('welcomeChannel')}\n"
+                             f"Goodbye: {g('goodbyeChannel')}\n"
+                             f"Rule: {g('ruleChannel')}")
             await interaction.followup.send(embed=e, ephemeral=True)
             return
-        labels = {"messageLog": "TIN NHAN", "serverLog": "SERVER",
-                  "voiceLog": "VOICE", "scamLog": "SCAM"}
+        labels = {
+            "messageLog": "TIN NHAN", "serverLog": "SERVER",
+            "voiceLog": "VOICE", "scamLog": "SCAM",
+            "welcomeChannel": "WELCOME", "goodbyeChannel": "GOODBYE",
+            "ruleChannel": "RULE",
+        }
         v = discord.ui.View(timeout=120)
         v.add_item(ChannelPick(choice, labels[choice]))
-        await interaction.followup.send(f"Chon kenh log {labels[choice]}:", view=v, ephemeral=True)
+        await interaction.followup.send(f"Chon kenh {labels[choice]}:", view=v, ephemeral=True)
 
 
-@tree.command(name="log", description="cai dat kenh log")
+@tree.command(name="log", description="cai dat kenh log / welcome / goodbye")
 async def log_cmd(interaction: discord.Interaction):
     if not interaction.user.guild_permissions.administrator:
         return await interaction.response.send_message("chi admin", ephemeral=True)
-    e = base_embed("CAI DAT LOG", "Chon loai log")
+    e = base_embed("CAI DAT", "Chon loai muon cai")
     await interaction.response.send_message(embed=e, view=LogMenu(), ephemeral=True)
 
 
@@ -957,7 +1000,9 @@ async def help_cmd(interaction: discord.Interaction):
         "**Mod (prefix /):**\n"
         "`/m` mute • `/um` unmute • `/mi` info mute\n"
         "`/b` ban • `/ub` unban • `/bl` banlist\n"
-        "`/w` warn • `/ws` warns • `/cw` clearwarn\n\n"
+        "`/k` kick • `/w` warn • `/ws` warns • `/cw` clearwarn\n"
+        "`/lock` • `/unlock` khoa/mo kenh\n"
+        "`/av` xem avatar\n\n"
         "**Anti-scam:** bot doc chu trong anh, xoa anh lua dao")
     await interaction.response.send_message(embed=e, ephemeral=True)
 
@@ -1058,7 +1103,6 @@ class WarnActionView(discord.ui.View):
             embed=None, view=self)
         e = base_embed("DA BAN", member=self.member)
         e.description = f"**{self.member.mention}** bi ban. ID: `{self.member.id}`"
-        e.set_image(url=GIF_URL)
         await interaction.channel.send(embed=e)
 
     @discord.ui.button(label="Xoa het warn", style=discord.ButtonStyle.secondary)
@@ -1099,6 +1143,93 @@ async def cooldown_check(ctx):
 bot.add_check(cooldown_check)
 
 
+# ---------- AVATAR ----------
+@bot.command(aliases=["av"])
+async def avatar(ctx, member: discord.Member = None):
+    member = member or ctx.author
+    e = base_embed(f"AVATAR • {member}", member=member)
+    e.set_image(url=member.display_avatar.replace(size=1024).url)
+    e.add_field(name="Ten", value=f"{member.mention}\n`{member}`", inline=True)
+    e.add_field(name="ID", value=f"`{member.id}`", inline=True)
+    e.set_footer(text=f"Yeu cau boi {ctx.author}")
+    await ctx.send(embed=e)
+
+
+# ---------- LOCK / UNLOCK ----------
+@bot.command(aliases=["lk"])
+@commands.has_permissions(manage_channels=True)
+@commands.bot_has_permissions(manage_channels=True)
+async def lock(ctx, channel: discord.TextChannel = None, *, reason=None):
+    channel = channel or ctx.channel
+    ow = channel.overwrites_for(ctx.guild.default_role)
+    ow.send_messages = False
+    try:
+        await channel.set_permissions(ctx.guild.default_role, overwrite=ow,
+                                      reason=f"lock boi {ctx.author} | {reason or 'khong ly do'}")
+    except discord.Forbidden:
+        return await ctx.send(embed=base_embed("Bot thieu quyen", "can Manage Channels", ctx.author))
+    e = base_embed("DA KHOA KENH", member=ctx.author)
+    e.description = f"{channel.mention} da bi khoa"
+    e.add_field(name="Mod", value=ctx.author.mention, inline=True)
+    e.add_field(name="Ly do", value=reason or "khong ly do", inline=True)
+    await ctx.send(embed=e)
+
+
+@bot.command(aliases=["ul"])
+@commands.has_permissions(manage_channels=True)
+@commands.bot_has_permissions(manage_channels=True)
+async def unlock(ctx, channel: discord.TextChannel = None, *, reason=None):
+    channel = channel or ctx.channel
+    ow = channel.overwrites_for(ctx.guild.default_role)
+    ow.send_messages = None
+    try:
+        await channel.set_permissions(ctx.guild.default_role, overwrite=ow,
+                                      reason=f"unlock boi {ctx.author} | {reason or 'khong ly do'}")
+    except discord.Forbidden:
+        return await ctx.send(embed=base_embed("Bot thieu quyen", "can Manage Channels", ctx.author))
+    e = base_embed("DA MO KHOA KENH", member=ctx.author)
+    e.description = f"{channel.mention} da duoc mo khoa"
+    e.add_field(name="Mod", value=ctx.author.mention, inline=True)
+    e.add_field(name="Ly do", value=reason or "khong ly do", inline=True)
+    await ctx.send(embed=e)
+
+
+# ---------- KICK ----------
+@bot.command(aliases=["k"])
+@commands.has_permissions(kick_members=True)
+@commands.bot_has_permissions(kick_members=True)
+async def kick(ctx, member: discord.Member = None, *, reason=None):
+    if member is None:
+        return await ctx.send(embed=base_embed("Thieu nguoi dung", "/k @user ly_do", ctx.author))
+    if member == ctx.author:
+        return await ctx.send(embed=base_embed("Loi", "tu kick minh lam gi", ctx.author))
+    if member.bot:
+        return await ctx.send(embed=base_embed("Loi", "khong kick bot", ctx.author))
+    if member.top_role >= ctx.author.top_role and ctx.author != ctx.guild.owner:
+        return await ctx.send(embed=base_embed("Loi", "role nguoi nay cao hon ban", ctx.author))
+    try:
+        dm = base_embed("Bi kick", member=ctx.author)
+        dm.add_field(name="Server", value=ctx.guild.name, inline=False)
+        dm.add_field(name="Ly do", value=reason or "khong ly do", inline=False)
+        dm.add_field(name="Mod", value=str(ctx.author), inline=True)
+        await member.send(embed=dm)
+    except Exception:
+        pass
+    try:
+        await member.kick(reason=f"{reason or 'khong ly do'} | Mod: {ctx.author}")
+    except discord.Forbidden:
+        return await ctx.send(embed=base_embed("Bot thieu quyen", "can Kick Members", ctx.author))
+    e = base_embed("DA KICK", member=member)
+    e.color = DARKER
+    e.description = f"{member.mention} da bi kick khoi server"
+    e.add_field(name="Ly do", value=reason or "khong ly do", inline=True)
+    e.add_field(name="Mod", value=ctx.author.mention, inline=True)
+    e.add_field(name="ID", value=f"`{member.id}`", inline=True)
+    e.set_thumbnail(url=member.display_avatar.url)
+    await send_with_roast(ctx, e, member)
+
+
+# ---------- MUTE / UNMUTE / MUTE INFO ----------
 @bot.command(aliases=["m"])
 @commands.has_permissions(moderate_members=True)
 async def mute(ctx, member: discord.Member = None, time_str: str = None, *, reason=None):
@@ -1148,7 +1279,7 @@ async def mute(ctx, member: discord.Member = None, time_str: str = None, *, reas
 @commands.has_permissions(moderate_members=True)
 async def unmute(ctx, member: discord.Member = None):
     if member is None:
-        return await ctx.send(embed=base_embed("Thieu nguoi dung", "tag nguoi can unmute", ctx.author))
+        return await ctx.send(embed=base_embed("Thieu nguoi dung", "tag nguoi can mute", ctx.author))
     if member.timed_out_until is None:
         return await ctx.send(embed=base_embed("Loi", "nguoi nay khong bi mute", ctx.author))
     try:
@@ -1164,7 +1295,6 @@ async def unmute(ctx, member: discord.Member = None):
     e.add_field(name="Nguoi dung", value=member.mention, inline=True)
     e.add_field(name="Boi", value=ctx.author.mention, inline=True)
     e.set_thumbnail(url=member.display_avatar.url)
-    e.set_image(url=GIF_URL)
     await ctx.send(embed=e)
 
 
@@ -1189,6 +1319,7 @@ async def muteinfo(ctx, member: discord.Member = None):
     return await ctx.send(embed=base_embed("Loi", "nguoi nay khong bi mute", member))
 
 
+# ---------- BAN / UNBAN / BANLIST ----------
 @bot.command(aliases=["b"])
 @commands.has_permissions(ban_members=True)
 async def ban(ctx, member: discord.Member = None, *, reason=None):
@@ -1233,7 +1364,6 @@ async def unban(ctx, user_id: int = None, *, reason=None):
         e.add_field(name="Nguoi dung", value=f"{user.mention}\n`{user.id}`", inline=False)
         e.add_field(name="Mod", value=ctx.author.mention, inline=True)
         e.set_thumbnail(url=user.display_avatar.url)
-        e.set_image(url=GIF_URL)
         await ctx.send(embed=e)
     except discord.NotFound:
         return await ctx.send(embed=base_embed("Loi", "nguoi nay khong bi ban", ctx.author))
@@ -1252,6 +1382,7 @@ async def banlist(ctx):
     await ctx.send(embed=e)
 
 
+# ---------- WARN ----------
 @bot.command(aliases=["w"])
 @commands.has_permissions(manage_messages=True)
 async def warn(ctx, member: discord.Member = None, *, reason=None):
@@ -1272,9 +1403,9 @@ async def warn(ctx, member: discord.Member = None, *, reason=None):
         dm.add_field(name="Lan", value=f"{progress_bar(count, 5)} `{count}/5`", inline=False)
         dm.add_field(name="Mod", value=str(ctx.author), inline=True)
         await member.send(embed=dm)
-        dm_status = "da gui DM"
+        dm_status = "da ib"
     except Exception:
-        dm_status = "khong gui duoc DM"
+        dm_status = "khong ib duoc"
     if count >= 5:
         e = base_embed("DU 5 WARN", member=member)
         e.description = (f"{member.mention} du **{count}/5** warn\n{progress_bar(count, 5)}\n\n"
@@ -1283,7 +1414,6 @@ async def warn(ctx, member: discord.Member = None, *, reason=None):
         e.add_field(name="Mod", value=ctx.author.mention, inline=True)
         e.add_field(name="DM", value=dm_status, inline=True)
         e.set_thumbnail(url=member.display_avatar.url)
-        e.set_image(url=GIF_URL)
         view = WarnActionView(member)
         view.message = await ctx.send(embed=e, view=view)
         return
@@ -1324,7 +1454,6 @@ async def clearwarn(ctx, member: discord.Member = None):
         save_json(WARN_FILE, warnings)
         e = base_embed("DA XOA WARN", f"{member.mention} da duoc xoa het warn", member=member)
         e.set_thumbnail(url=member.display_avatar.url)
-        e.set_image(url=GIF_URL)
         await ctx.send(embed=e)
     else:
         return await ctx.send(embed=base_embed("Loi", "nguoi nay khong co warn", ctx.author))
@@ -1341,9 +1470,13 @@ async def help_prefix(ctx):
         "`/b @user [ly do]` - ban\n"
         "`/ub <ID>` - unban\n"
         "`/bl` - ban list\n"
+        "`/k @user [ly do]` - kick\n"
         "`/w @user [ly do]` - warn\n"
         "`/ws [@user]` - xem warn\n"
-        "`/cw @user` - xoa warn\n\n"
+        "`/cw @user` - xoa warn\n"
+        "`/lock [#kenh] [ly do]` - khoa kenh\n"
+        "`/unlock [#kenh] [ly do]` - mo kenh\n"
+        "`/av [@user]` - xem avatar\n\n"
         "**Slash:** `/log` `/setup` `/panel` `/ticket` `/ping` `/help`\n\n"
         "**Anti-scam:** bot tu doc chu trong anh, xoa anh lua dao")
     e.set_thumbnail(url=ctx.guild.icon.url if ctx.guild.icon else None)
@@ -1373,10 +1506,12 @@ async def setup_hook():
         print("canh bao: chua cai pytesseract, anti-scam anh se khong hoat dong")
     try:
         if GUILD_ID:
+            # sync nhanh cho 1 server test
             g = discord.Object(id=GUILD_ID)
             tree.copy_global_to(guild=g)
             await tree.sync(guild=g)
         else:
+            # sync global cho moi server bot tham gia
             await tree.sync()
     except Exception as e:
         print("sync loi:", e)
@@ -1389,7 +1524,7 @@ async def on_ready():
     print(f"online: {bot.user} | {len(bot.guilds)} server")
     try:
         await bot.change_presence(activity=discord.Activity(
-            type=discord.ActivityType.watching, name="log he thong"))
+            type=discord.ActivityType.watching, name=f"{len(bot.guilds)} server"))
     except Exception:
         pass
 
